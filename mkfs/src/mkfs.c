@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <tberry/futils.h>
 #include <tberry/types.h>
+#include <tberry/debug.h>
 
 #include "mkfs.h"
 
@@ -10,7 +12,16 @@
 #define SUPER_BLK_OFFSET 0
 #define INODE_TBL_OFFSET 1
 
+// Flags `dir`, `read`, `write`, and `data_blk` 0
+#define ROOT_INODE_VAL 0x80600000
+
+/*
+ * Essentially gets written to the super block
+ */
 struct _layout {
+	usize disk_size;
+	usize blk_size;
+	usize num_blks;
 	usize num_inode_blks;
 	usize num_data_blks;
 };
@@ -26,10 +37,54 @@ struct _layout calc_layout(usize disk_size, usize blk_size)
 	usize num_inode_blks = num_usable_blks / (1 + data_blks_per_inode_blk);
 	usize num_data_blks = num_usable_blks - num_inode_blks;
 	struct _layout fs_l = {
+		.disk_size = disk_size,
+		.blk_size = blk_size,
+		.num_blks = num_blks,
 		.num_inode_blks = num_inode_blks,
 		.num_data_blks = num_data_blks,
 	};
 	return fs_l;
+}
+
+u8 _write_super_blk(FILE *f, struct _layout layout)
+{
+	// First available is 1 because 0 is reserved for ROOT_DIR
+	usize next_avl_inode = 1;
+	usize next_avl_blk = 1;
+
+	DEBUG("Formatting...");
+	DEBUG_VAL("%d", layout.disk_size);
+	DEBUG_VAL("%d", layout.blk_size);
+	DEBUG_VAL("%d", layout.num_blks);
+	DEBUG_VAL("%d", layout.num_inode_blks);
+	DEBUG_VAL("%d", layout.num_data_blks);
+	DEBUG_VAL("%d", next_avl_inode);
+	DEBUG_VAL("%d", next_avl_blk);
+
+	usize to_write[] = {
+		layout.disk_size,
+		layout.blk_size,
+		layout.num_blks,
+		layout.num_inode_blks,
+		layout.num_data_blks,
+		next_avl_inode,
+		next_avl_blk,
+	};
+	fseek(f, 0, SEEK_SET);
+	fwrite(&to_write, 8, 7, f);
+
+	return 0;
+}
+
+u8 _write_root_inode(FILE *f, usize blk_size)
+{
+	usize addr = INODE_TBL_OFFSET * blk_size;
+	fseek(f, addr, SEEK_SET);
+
+	u32 root_inode = ROOT_INODE_VAL;
+	fwrite(&root_inode, sizeof(root_inode), 1, f);
+
+	return 0;
 }
 
 /*
@@ -37,24 +92,25 @@ struct _layout calc_layout(usize disk_size, usize blk_size)
  */
 u8 _format(FILE *f, usize blk_size)
 {
+	u8 ret = 0;
+
 	usize disk_size = fsizeof(f);
-	struct _layout fs_l = calc_layout(disk_size, blk_size);
+	struct _layout layout = calc_layout(disk_size, blk_size);
 
-	fseek(f, 0, SEEK_SET);
-	fwrite(&blk_size, 1, 1, f);
-	usize num_blks = fs_l.num_inode_blks + fs_l.num_data_blks;
-	fwrite(&num_blks, 1, 1, f);
-	fwrite(&fs_l.num_inode_blks, 1, 1, f);
-	fwrite(&fs_l.num_data_blks, 1, 1, f);
+	ret = _write_super_blk(f, layout);
+	if (ret) {
+		return ret;
+	}
+	ret = _write_root_inode(f, blk_size);
+	return ret;
+}
 
-	// 0 is reserved for ROOT_DIR
-	usize next_avl_inode = 1;
-	fwrite(&next_avl_inode, 1, 1, f);
-
-	// 0 is reserved for ROOT_DIR
-	usize next_avl_blk = 1;
-	fwrite(&next_avl_blk, 1, 1, f);
-
+u8 _extend_file_len(FILE *f, usize len)
+{
+	// Set the file size to @len
+	fseek(f, len - 1, SEEK_SET);
+	u8 blank_byte = 0;
+	fwrite(&blank_byte, 1, 1, f);
 	return 0;
 }
 
@@ -62,24 +118,13 @@ u8 fs_init(char *path, usize len, usize blk_size)
 {
 	u8 ret = 0;
 	FILE *f = fopen(path, "wb");
-	u8 empty_arr[len];
-	for (int i = 0; i < len; ++i) {
-		empty_arr[i] = 0;
-	}
-	bool err = fwrite(empty_arr, len, 1, f);
-	if (err) {
-		ret = 1;
-		goto end;
-	}
+	_extend_file_len(f, len);
 
 	// TODO: use `errno` to see the err
-	err = _format(f, blk_size);
+	bool err = _format(f, blk_size);
 	if (err) {
-		ret = 2;
-		goto end;
+		ret = 1;
 	}
-
-end:
 	fclose(f);
 	return ret;
 }

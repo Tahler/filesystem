@@ -7,7 +7,6 @@
 #include <tberry/err.h>
 #include <tberry/futils.h>
 #include <tberry/types.h>
-#include <tberry/debug.h> // TODO: remove
 
 #include "mkfs.h"
 
@@ -139,20 +138,17 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-	printf("starting up\n");
 	char *filename = argv[argc - 1];
 
 	u8 ret = 0;
 	if (fexists(filename) && !fs_size_spec) {
 		// Reformat the file, using its current size
-		// ret = fs_format(filename, blk_size);
-		printf("would call format(%s, %lu)", filename, blk_size);
+		ret = fs_format(filename, blk_size);
 	} else {
 		usize fs_size_in_bytes = parse_size(fs_size);
 
 		// Create / overwrite the file
-		// ret = fs_init(filename, fs_size_in_bytes, blk_size);
-		printf("would call init(%s, %lu, %lu)", filename, fs_size_in_bytes, blk_size);
+		ret = fs_init(filename, fs_size_in_bytes, blk_size);
 	}
 
 	return ret;
