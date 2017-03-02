@@ -23,8 +23,8 @@ The entire disk is split into 4 KiB blocks.
 The first block on disk is known as the "super block".
 
 The super block contains the block size, number of blocks on disk, the inode
-table size (in blocks), the next available inode entry, and the next available
-data block.
+table size (in blocks), the number of data blocks, the next available inode
+entry, and the next available data block.
 
 ## Inode table
 
