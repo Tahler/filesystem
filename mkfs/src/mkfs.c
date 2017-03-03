@@ -34,7 +34,8 @@ struct _layout calc_layout(usize disk_size, usize blk_size)
 	usize num_blks = disk_size / blk_size;
 	// Subtract one for the super block
 	usize num_usable_blks = num_blks - 1;
-	usize num_inode_blks = num_usable_blks / (1 + data_blks_per_inode_blk);
+	usize num_inode_blks =
+		1 + (num_usable_blks / (1 + data_blks_per_inode_blk));
 	usize num_data_blks = num_usable_blks - num_inode_blks;
 	struct _layout fs_l = {
 		.disk_size = disk_size,
