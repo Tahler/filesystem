@@ -1,4 +1,3 @@
-COMMON_INC_DIR = ../include
 INC_DIR = include
 SRC_DIR = src
 OUT_DIR = target
@@ -10,7 +9,8 @@ OBJ = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
 
 CC = gcc
 
-CFLAGS = -g -Wall -I$(COMMON_INC_DIR) -I$(INC_DIR)
+LIB = -ltberry
+CFLAGS = -g -Wall -I$(INC_DIR)
 LDFLAGS =
 
 NAME = fs
@@ -21,7 +21,7 @@ all: setup $(TARGET)
 
 .PHONY: run
 run: all
-	@./$(TARGET)
+	@./$(TARGET) $(ARGS)
 
 .PHONY: setup
 setup:
@@ -29,9 +29,9 @@ setup:
 	@mkdir -p $(OBJ_DIR)
 
 $(TARGET): $(OBJ)
-	@$(CC) $(LDFLAGS) $(OBJ) -o $(TARGET)
+	@$(CC) $(LDFLAGS) $(LIB) $^ -o $@
 
-$(OBJ): $(SRC) $(INC)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
