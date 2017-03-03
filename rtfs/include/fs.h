@@ -12,7 +12,8 @@
 struct fs_file_desc {
 	char *path;
 
-	usize curr_block_num;
+	usize head_blk_num;
+	usize curr_blk_num;
 	usize curr_offset;
 
 	bool is_dir;
