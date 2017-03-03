@@ -1,8 +1,9 @@
 #include <assert.h>
 #include <string.h>
 
-#include <tberry/types.h>
+#include <tberry/debug.h>
 #include <tberry/futils.h>
+#include <tberry/types.h>
 
 #include "fs.h"
 
@@ -142,13 +143,13 @@ usize _read_next_avl_blk()
 	return _read_usize();
 }
 
-usize _write_next_avl_blk(usize next_avl_blk)
+void _write_next_avl_blk(usize next_avl_blk)
 {
 	_seek_to_blk_offset(SUPER_BLK_OFFSET, NEXT_AVL_BLK_OFFSET);
-	return _write_next_avl_blk(next_avl_blk);
+	_write_usize(next_avl_blk);
 }
 
-usize _read_inode(usize inode_num)
+u32 _read_inode(usize inode_num)
 {
 	_seek_to_inode(inode_num);
 	return _read_u32();
@@ -183,6 +184,7 @@ usize _alloc_inode()
 usize _alloc_data_blk()
 {
 	usize next_avl_blk = _read_next_avl_blk();
+	DEBUG_VAL("%lu", next_avl_blk);
 
 	_seek_to_data_addr(next_avl_blk, 0);
 	usize next_addr = _read_usize();
@@ -191,6 +193,7 @@ usize _alloc_data_blk()
 		? next_avl_blk + 1
 		: next_addr;
 	_write_next_avl_blk(next_next_avl_blk);
+	DEBUG_VAL("%lu", next_next_avl_blk);
 
 	return next_avl_blk;
 }
@@ -341,6 +344,7 @@ void _get_end_filename(char *path, char *dest)
  */
 void _create_path(char *path, usize inode_num)
 {
+	DEBUG_VAL("%s", path);
 	assert(path[0] == '/');
 
 	usize parent_dir_blk_num = _get_parent_dir_blk_num(path);
@@ -357,8 +361,12 @@ void _create_path(char *path, usize inode_num)
 u8 fs_create(char *path, bool is_dir, u8 owner)
 {
 	usize inode_num = _alloc_inode();
+	DEBUG_VAL("%lu", inode_num);
 	usize data_blk = _alloc_data_blk();
+	DEBUG_VAL("%lu", data_blk);
 	u32 inode = _new_inode(is_dir, owner, true, true, data_blk);
+	DEBUG_VAL("0x%x", inode);
+	DEBUG("Creating inode %lu", inode_num);
 	_write_inode(inode_num, inode);
 	_create_path(path, inode_num);
 	return 0;

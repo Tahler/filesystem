@@ -31,6 +31,7 @@ u8 fs_load(char *backing_file);
 
 /*
  * Creates an empty file at @path
+ * Note: @path must be an absolute path (i.e. it must start with '/')
  */
 u8 fs_create(char *path, bool is_dir, u8 owner);
 
