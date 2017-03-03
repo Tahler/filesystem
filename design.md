@@ -1,4 +1,4 @@
-# Our design
+# Filesystem design
 
 *Ext4, hold the extra*
 
@@ -105,7 +105,7 @@ A "directory" is still a file, whose contents are contained in data blocks.
 
 The contents are a linear array of entries. Each entry consists of a filename
 and inode number. The filename is a null-terminated string (limited to 255
-characters) and the inode number is an unsigned 16 bit integer.
+characters) and the inode number is an unsigned 32 bit integer.
 
 Therefore, to `cd $arg`, for example, one would have to linearly traverse the
 directory file contents for the entry with the filename `$arg`.
