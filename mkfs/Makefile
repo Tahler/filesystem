@@ -1,4 +1,3 @@
-COMMON_INC_DIR = ../include
 SRC_DIR = src
 OUT_DIR = target
 OBJ_DIR = $(OUT_DIR)/obj
@@ -10,7 +9,7 @@ OBJ = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
 CC = gcc
 
 LIB = -ltberry
-CFLAGS = -g -Wall -I$(COMMON_INC_DIR)
+CFLAGS = -g -Wall
 LDFLAGS =
 
 NAME = mkfs.ext4holdtheextra

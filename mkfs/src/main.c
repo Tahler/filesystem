@@ -48,7 +48,6 @@ void exit_invalid_args(char *cmd, char *msg)
 	eprintf("%s\n", msg);
 	exit_print_usage(cmd, 1);
 }
-
 enum flag_opt {
 	_NONE,
 	HELP,
