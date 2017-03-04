@@ -36,4 +36,4 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 
 .PHONY: clean
 clean:
-	rm -rf $(OUT_DIR)
+	@rm -rf $(OUT_DIR)
