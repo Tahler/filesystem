@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <tberry/debug.h>
 #include <tberry/futils.h>
 #include <tberry/types.h>
 
@@ -300,8 +299,6 @@ usize _alloc_data_blk()
 		? next_avl_blk + 1
 		: next_addr;
 	_write_next_avl_blk(next_next_avl_blk);
-	DEBUG("allocated blk %lu (next will be %lu)",
-			next_avl_blk, next_next_avl_blk);
 
 	_clear_data_blk(next_avl_blk);
 
@@ -313,7 +310,6 @@ usize _alloc_data_blk()
  */
 void _dealloc_data_blk(usize data_blk_num)
 {
-	DEBUG("deallocating %lu", data_blk_num);
 	_seek_to_data_addr(data_blk_num, 0);
 	usize next_blk = _read_usize();
 
@@ -432,8 +428,6 @@ u32 _get_inode_of_path(char *path)
 	usize parent_dir_blk_num = _get_parent_dir_blk_num(path);
 	char filename[MAX_FILENAME_LEN];
 	_get_end_filename(path, filename);
-	DEBUG_VAL("%lu", parent_dir_blk_num);
-	DEBUG_VAL("%s", filename);
 	usize inode_num = _get_inode_num_of_name(parent_dir_blk_num, filename);
 	u32 inode = _get_inode(inode_num);
 	return inode;
@@ -531,7 +525,6 @@ u8 fs_create(char *path, bool is_dir, u8 owner)
 	usize inode_num = _alloc_inode();
 	usize data_blk = _alloc_data_blk();
 	u32 inode = _new_inode(is_dir, owner, true, true, data_blk);
-	DEBUG("Creating inode %lu", inode_num);
 	_set_inode(inode_num, inode);
 	_create_path(path, inode_num);
 	fflush(bk_f);
@@ -576,7 +569,6 @@ usize _get_next_data_blk_num(usize curr_blk)
 {
 	_seek_to_data_addr(curr_blk, 0);
 	usize next_blk_num = _read_usize();
-	DEBUG_VAL("%lu", next_blk_num);
 	if (next_blk_num == 0) {
 		next_blk_num = _alloc_data_blk();
 		_seek_to_data_addr(curr_blk, 0);

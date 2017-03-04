@@ -19,20 +19,18 @@ int main(int argc, char *argv[])
 
 	fs_create("/tmp", false, 42);
 	struct fs_file_desc fd_tmp = fs_open("/tmp");
-	DEBUG_VAL("%lu", fd_tmp.head_blk_num);
 	pause("CREATED and OPENED /tmp");
 
 	fs_create("/other", false, 42);
-	struct fs_file_desc fd_other = fs_open("/other");
-	DEBUG_VAL("%lu", fd_other.head_blk_num);
-	pause("CREATED and OPENED /other");
+	fs_open("/other");
+	pause("CREATED /other");
 
 	char *msg = "this message is 24 chars";
 	assert(strlen(msg) == 24);
 	DEBUG("Writing 2400 characters to /tmp (3 blocks)");
 	for (int i = 0; i < 100; ++i) {
 		// add one to write the null char too
-		fs_write(&fd_tmp, (u8 *) msg, num_chars);
+		fs_write(&fd_tmp, (u8 *) msg, 25);
 	}
 	pause("WROTE to /tmp");
 
