@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <tberry/debug.h>
 #include <tberry/futils.h>
@@ -18,6 +19,8 @@
 #define NEXT_AVL_BLK_OFFSET (6 * sizeof(usize))
 
 #define DATA_BLK_NEXT_BLK_NUM_OFFSET 0
+#define DATA_BLK_NEXT_BLK_NUM_LEN sizeof(usize)
+#define DATA_BLK_USABLE_OFFSET DATA_BLK_NEXT_BLK_NUM_LEN
 
 #define ROOT_DIR_BLK_NUM 0
 
@@ -37,6 +40,7 @@
 struct _layout {
 	usize disk_size;
 	usize blk_size;
+	usize data_blk_usable_len;
 	usize num_blks;
 	usize num_inode_blks;
 	usize num_data_blks;
@@ -62,6 +66,7 @@ u8 fs_load(char *backing_file)
 	fread(&layout.num_blks, sizeof(usize), 1, bk_f);
 	fread(&layout.num_inode_blks, sizeof(usize), 1, bk_f);
 	fread(&layout.num_data_blks, sizeof(usize), 1, bk_f);
+	layout.data_blk_usable_len = layout.blk_size - sizeof(usize);
 	return 0;
 }
 
@@ -146,6 +151,11 @@ void _seek_to_data_addr(usize blk_num, usize offset)
 	_seek_to_blk_offset(abs_blk_num, offset);
 }
 
+void _seek_to_data_usable_addr(usize blk_num, usize offset)
+{
+	_seek_to_data_addr(blk_num, DATA_BLK_USABLE_OFFSET + offset);
+}
+
 usize _read_usize()
 {
 	usize x;
@@ -216,13 +226,13 @@ void _write_next_avl_blk(usize next_avl_blk)
 	_write_usize(next_avl_blk);
 }
 
-u32 _read_inode(usize inode_num)
+u32 _get_inode(usize inode_num)
 {
 	_seek_to_inode(inode_num);
 	return _read_u32();
 }
 
-void _write_inode(usize inode_num, u32 inode)
+void _set_inode(usize inode_num, u32 inode)
 {
 	_seek_to_inode(inode_num);
 	_write_u32(inode);
@@ -235,7 +245,7 @@ usize _alloc_inode()
 {
 	usize next_avl_inode = _read_next_avl_inode();
 
-	u32 next_addr = _read_inode(next_avl_inode);
+	u32 next_addr = _get_inode(next_avl_inode);
 
 	usize next_next_avl_inode = next_addr == 0
 		? next_avl_inode + 1
@@ -254,12 +264,26 @@ u32 _dealloc_inode(usize inode_num)
 	//       u32 to prevent overflow
 	u32 next_avl_inode = _read_next_avl_inode();
 
-	u32 deleted = _read_inode(inode_num);
-	_write_inode(inode_num, next_avl_inode);
+	u32 deleted = _get_inode(inode_num);
+	_set_inode(inode_num, next_avl_inode);
 
 	_write_next_avl_inode(inode_num);
 
 	return deleted;
+}
+
+void _clear_blk(usize blk_num)
+{
+	_seek_to_blk_offset(blk_num, 0);
+	u8 zero_buf[layout.blk_size];
+	memset(zero_buf, 0, layout.blk_size);
+	fwrite(zero_buf, sizeof(u8), layout.blk_size, bk_f);
+}
+
+void _clear_data_blk(usize blk_num)
+{
+	usize data_blks_offset = 1 + layout.num_inode_blks;
+	_clear_blk(data_blks_offset + blk_num);
 }
 
 /*
@@ -268,7 +292,6 @@ u32 _dealloc_inode(usize inode_num)
 usize _alloc_data_blk()
 {
 	usize next_avl_blk = _read_next_avl_blk();
-	DEBUG_VAL("%lu", next_avl_blk);
 
 	_seek_to_data_addr(next_avl_blk, 0);
 	usize next_addr = _read_usize();
@@ -277,7 +300,10 @@ usize _alloc_data_blk()
 		? next_avl_blk + 1
 		: next_addr;
 	_write_next_avl_blk(next_next_avl_blk);
-	DEBUG_VAL("%lu", next_next_avl_blk);
+	DEBUG("allocated blk %lu (next will be %lu)",
+			next_avl_blk, next_next_avl_blk);
+
+	_clear_data_blk(next_avl_blk);
 
 	return next_avl_blk;
 }
@@ -287,6 +313,7 @@ usize _alloc_data_blk()
  */
 void _dealloc_data_blk(usize data_blk_num)
 {
+	DEBUG("deallocating %lu", data_blk_num);
 	_seek_to_data_addr(data_blk_num, 0);
 	usize next_blk = _read_usize();
 
@@ -300,6 +327,9 @@ void _dealloc_data_blk(usize data_blk_num)
 	}
 }
 
+/*
+ * "/hello/me" -> "/hello"
+ */
 void _get_parent_dir_path(char *path, char *dest)
 {
 	int last_delim = 0;
@@ -311,6 +341,23 @@ void _get_parent_dir_path(char *path, char *dest)
 	// TODO: likely bug here, off by 1
 	memcpy(dest, path, last_delim);
 	dest[last_delim] = '\0';
+}
+
+/*
+ * "/hello/me" -> "me"
+ */
+void _get_end_filename(char *path, char *dest)
+{
+	int j = 0;
+	for (int i = 0; path[i] != '\0'; ++i) {
+		if (path[i] == '/') {
+			j = 0;
+		} else {
+			dest[j] = path[i];
+			j += 1;
+		}
+	}
+	dest[j] = '\0';
 }
 
 void _seek_to_dir_entry_num(usize dir_blk_num, usize entry_num)
@@ -346,6 +393,7 @@ usize _get_inode_num_of_name(usize dir_blk_num, char *name)
 {
 	_seek_to_dir_entry_num(dir_blk_num, _get_entry_num(dir_blk_num, name));
 
+	_read_bool(); // skip forward one byte
 	char entry_name[MAX_FILENAME_LEN];
 	_read_str(MAX_FILENAME_LEN, entry_name);
 	assert(strcmp(name, entry_name) == 0);
@@ -353,6 +401,10 @@ usize _get_inode_num_of_name(usize dir_blk_num, char *name)
 	return entry_num;
 }
 
+/*
+ * Recursively traverses until reaching the parent directory of the end file in
+ * @path, the returns the of the data block representing said directory.
+ */
 usize _get_parent_dir_blk_num(char *path)
 {
 	usize path_len = strlen(path);
@@ -367,10 +419,24 @@ usize _get_parent_dir_blk_num(char *path)
 	// read up until the last token (i.e. the parent dir)
 	while ((next = strtok(NULL, PATH_DELIM)) != NULL) {
 		// search for sub_dir in dir_blk
-		dir_blk_num = _get_inode_num_of_name(dir_blk_num, sub_dir);
+		u32 inode_num = _get_inode_num_of_name(dir_blk_num, sub_dir);
+		u32 inode = _get_inode(inode_num);
+		dir_blk_num = _inode_data_ptr(inode);
 		sub_dir = next;
 	}
 	return dir_blk_num;
+}
+
+u32 _get_inode_of_path(char *path)
+{
+	usize parent_dir_blk_num = _get_parent_dir_blk_num(path);
+	char filename[MAX_FILENAME_LEN];
+	_get_end_filename(path, filename);
+	DEBUG_VAL("%lu", parent_dir_blk_num);
+	DEBUG_VAL("%s", filename);
+	usize inode_num = _get_inode_num_of_name(parent_dir_blk_num, filename);
+	u32 inode = _get_inode(inode_num);
+	return inode;
 }
 
 void _add_dir_entry(usize dir_blk_num, char *entry_name, u32 entry_num)
@@ -420,23 +486,6 @@ u32 _del_dir_entry(usize dir_blk_num, char *entry_name)
 }
 
 /*
- * "/hello/me" -> "me"
- */
-void _get_end_filename(char *path, char *dest)
-{
-	int j = 0;
-	for (int i = 0; path[i] != '\0'; ++i) {
-		if (path[i] == '/') {
-			j = 0;
-		} else {
-			dest[j] = path[i];
-			j += 1;
-		}
-	}
-	dest[j] = '\0';
-}
-
-/*
  * Note: the parent directory must exist
  */
 void _create_path(char *path, usize inode_num)
@@ -483,7 +532,7 @@ u8 fs_create(char *path, bool is_dir, u8 owner)
 	usize data_blk = _alloc_data_blk();
 	u32 inode = _new_inode(is_dir, owner, true, true, data_blk);
 	DEBUG("Creating inode %lu", inode_num);
-	_write_inode(inode_num, inode);
+	_set_inode(inode_num, inode);
 	_create_path(path, inode_num);
 	fflush(bk_f);
 	return 0;
@@ -505,17 +554,88 @@ u8 fs_delete(char *path)
  */
 struct fs_file_desc fs_open(char *path)
 {
-	// TODO:
-	// u32 inode = 0;
-	struct fs_file_desc fd;
+	u32 inode = _get_inode_of_path(path);
+	usize data_blk_num = _inode_data_ptr(inode);
+	struct fs_file_desc fd = {
+		.path = path,
+		.head_blk_num = data_blk_num,
+		.curr_blk_num = data_blk_num,
+		.curr_offset = 0,
+		.is_dir = _inode_is_dir(inode),
+		.owner = _inode_owner(inode),
+		.has_read = _inode_has_read_perm(inode),
+		.has_write = _inode_has_write_perm(inode),
+	};
 	return fd;
+}
+
+/*
+ * Creates or retrieves the next data block
+ */
+usize _get_next_data_blk_num(usize curr_blk)
+{
+	_seek_to_data_addr(curr_blk, 0);
+	usize next_blk_num = _read_usize();
+	DEBUG_VAL("%lu", next_blk_num);
+	if (next_blk_num == 0) {
+		next_blk_num = _alloc_data_blk();
+		_seek_to_data_addr(curr_blk, 0);
+		_write_usize(next_blk_num);
+	}
+	return next_blk_num;
+}
+
+u8 _traversal_loop(struct fs_file_desc *fd,
+	           u8 *buf,
+	           usize len,
+	           u8 func(u8 *, usize))
+{
+	usize bytes_remaining = len;
+	while (bytes_remaining > 0) {
+		usize post_write_offset = fd->curr_offset + bytes_remaining;
+		bool overflow = post_write_offset > layout.data_blk_usable_len;
+
+		usize cpy_len = overflow
+			? layout.data_blk_usable_len - fd->curr_offset
+			: bytes_remaining;
+
+		_seek_to_data_usable_addr(fd->curr_blk_num, fd->curr_offset);
+		func(buf, cpy_len);
+		bytes_remaining -= cpy_len;
+
+		fd->curr_offset += cpy_len;
+		if (fd->curr_offset >= layout.data_blk_usable_len) {
+			fd->curr_blk_num =
+				_get_next_data_blk_num(fd->curr_blk_num);
+			fd->curr_offset = 0;
+		}
+	}
+	return 0;
+}
+
+u8 _write_func(u8 *buf, usize len)
+{
+	usize num_written = fwrite(buf, sizeof(buf[0]), len, bk_f);
+	return num_written != len;
+}
+
+u8 _read_func(u8 *buf, usize len)
+{
+	usize num_read = fread(buf, sizeof(buf[0]), len, bk_f);
+	return num_read != len;
+}
+
+u8 _no_op(u8 *buf, usize len)
+{
+	return 0;
 }
 
 /*
  * Writes @len bytes from @buf to the file at the current seek position
  */
-u8 fs_write(struct fs_file_desc *f, u8 *buf, usize len)
+u8 fs_write(struct fs_file_desc *fd, u8 *buf, usize len)
 {
+	_traversal_loop(fd, buf, len, *_write_func);
 	fflush(bk_f);
 	return 0;
 }
@@ -523,16 +643,16 @@ u8 fs_write(struct fs_file_desc *f, u8 *buf, usize len)
 /*
  * Reads @len bytes into @buf from the file at the current seek position
  */
-u8 fs_read(struct fs_file_desc *f, u8 *buf, usize len)
+u8 fs_read(struct fs_file_desc *fd, u8 *buf, usize len)
 {
+	_traversal_loop(fd, buf, len, *_read_func);
 	return 0;
 }
 
-/*
- * Moves the seek position by @diff bytes from the current position, or end of
- * the file (according to @option) by @diff
- */
-u8 fs_seek(struct fs_file_desc *f, isize diff)
+u8 fs_seek(struct fs_file_desc *fd, usize offset)
 {
+	fd->curr_blk_num = fd->head_blk_num;
+	fd->curr_offset = 0;
+	_traversal_loop(fd, NULL, offset, *_no_op);
 	return 0;
 }

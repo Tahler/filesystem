@@ -57,10 +57,9 @@ u8 fs_write(struct fs_file_desc *f, u8 *buf, usize len);
 u8 fs_read(struct fs_file_desc *f, u8 *buf, usize len);
 
 /*
- * Moves the seek position by @diff bytes from the current position, or end of
- * the file (according to @option) by @diff
+ * Moves the position of @f to be @offset bytes into the file
  */
-u8 fs_seek(struct fs_file_desc *f, isize diff);
+u8 fs_seek(struct fs_file_desc *f, usize offset);
 
 /*
  * Deletes the file at @path
