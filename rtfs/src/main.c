@@ -28,16 +28,17 @@ int main(int argc, char *argv[])
 	pause("CREATED and OPENED /other");
 
 	char *msg = "this message is 24 chars";
+	assert(strlen(msg) == 24);
 	DEBUG("Writing 2400 characters to /tmp (3 blocks)");
 	for (int i = 0; i < 100; ++i) {
-		fs_write(&fd_tmp, (u8 *) msg, strlen(msg));
+		// add one to write the null char too
+		fs_write(&fd_tmp, (u8 *) msg, num_chars);
 	}
 	pause("WROTE to /tmp");
 
 	fs_seek(&fd_tmp, 0);
-	assert(strlen(msg) == 24);
-	char msg_cpy[24];
-	fs_read(&fd_tmp, (u8 *) msg_cpy, 24);
+	char msg_cpy[25];
+	fs_read(&fd_tmp, (u8 *) msg_cpy, 25);
 	assert(strcmp(msg, msg_cpy) == 0);
 	pause("ASSERTED that the message can be read back");
 
